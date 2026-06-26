@@ -1,0 +1,1563 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>HeistCards: City of Thieves</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/@phosphor-icons/web"></script>
+    <style>
+        :root {
+            --bg-dark: #0a0f18;
+            --text-main: #f8fafc;
+        }
+
+        * {
+            box-sizing: border-box;
+            -webkit-tap-highlight-color: transparent;
+            user-select: none;
+        }
+
+        body, html {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            background: #000;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            overflow: hidden;
+            color: var(--text-main);
+        }
+        
+        #app {
+            width: 100%;
+            max-width: 480px;
+            height: 100%;
+            margin: 0 auto;
+            background: var(--bg-dark);
+            display: flex;
+            flex-direction: column;
+            position: relative;
+            box-shadow: 0 0 30px rgba(0,0,0,0.9);
+        }
+
+        .view {
+            display: none;
+            flex: 1;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .view.active {
+            display: flex;
+            animation: fadeIn 0.3s ease;
+        }
+
+        @keyframes fadeIn { 
+            from { opacity: 0; } 
+            to { opacity: 1; } 
+        }
+        
+        @keyframes dropIn { 
+            0% { transform: scale(1.1) translateY(-10px); opacity: 0; } 
+            100% { transform: scale(1) translateY(0); opacity: 1; } 
+        }
+
+        .scrollable { overflow-y: auto; overflow-x: hidden; }
+        .scrollable::-webkit-scrollbar { width: 4px; }
+        .scrollable::-webkit-scrollbar-thumb { background: #334155; border-radius: 4px; }
+        
+        .scrollable-x { overflow-x: auto; overflow-y: hidden; display: flex; }
+        .scrollable-x::-webkit-scrollbar { height: 4px; }
+        .scrollable-x::-webkit-scrollbar-thumb { background: #334155; border-radius: 4px; }
+
+        /* --- MAP VISUALS --- */
+        .city-world {
+            position: relative;
+            width: 800px;
+            height: 1000px;
+            background: #1e293b;
+        }
+        
+        .map-viewport {
+            flex: 1;
+            overflow: auto;
+            position: relative;
+            background: #0f172a;
+        }
+        
+        .road { position: absolute; background: #334155; }
+        .road-v {
+            width: 60px; height: 100%; top: 0;
+            border-left: 2px solid #475569; border-right: 2px solid #475569;
+            background-image: linear-gradient(#cbd5e1 50%, transparent 50%);
+            background-size: 4px 40px; background-position: center; background-repeat: repeat-y;
+        }
+        .road-h {
+            width: 100%; height: 60px; left: 0;
+            border-top: 2px solid #475569; border-bottom: 2px solid #475569;
+            background-image: linear-gradient(90deg, #cbd5e1 50%, transparent 50%);
+            background-size: 40px 4px; background-position: center; background-repeat: repeat-x;
+        }
+        
+        .tree { position: absolute; width: 30px; height: 30px; background: radial-gradient(circle at 30% 30%, #22c55e, #14532d); border-radius: 50%; box-shadow: 2px 5px 10px rgba(0,0,0,0.5); }
+        .bush { position: absolute; width: 16px; height: 16px; background: radial-gradient(circle at 30% 30%, #84cc16, #3f6212); border-radius: 50%; box-shadow: 1px 3px 5px rgba(0,0,0,0.4); }
+        .house { position: absolute; background: #475569; border-top: 5px solid #64748b; box-shadow: 5px 10px 15px rgba(0,0,0,0.6); border-radius: 2px; }
+
+        .bank-node {
+            position: absolute;
+            width: 100px;
+            height: 100px;
+            background: #0f172a;
+            border: 4px solid;
+            border-radius: 16px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            box-shadow: 0 0 30px;
+            transition: transform 0.2s, filter 0.2s;
+            z-index: 20;
+        }
+        .bank-node:active { transform: scale(0.9); }
+        .bank-node.locked { filter: grayscale(100%) brightness(0.5); pointer-events: none; }
+        
+        .bank-label {
+            position: absolute;
+            top: -30px;
+            white-space: nowrap;
+            background: rgba(0,0,0,0.8);
+            padding: 4px 8px;
+            border-radius: 6px;
+            font-weight: bold;
+            font-size: 12px;
+            pointer-events: none;
+            border: 1px solid rgba(255,255,255,0.2);
+        }
+
+        /* --- SAFE --- */
+        .safe-ring {
+            width: 260px; height: 260px; border-radius: 50%;
+            background: #111; border: 16px solid #334155;
+            box-shadow: inset 0 0 30px #000, 0 20px 50px rgba(0,0,0,0.9);
+            position: relative; margin: 0 auto; transition: border-color 0.3s;
+        }
+        .safe-zone {
+            position: absolute; inset: 10px; border-radius: 50%;
+            opacity: 0.6; transition: background 0.2s;
+        }
+        .safe-needle-box {
+            position: absolute; inset: 0; border-radius: 50%;
+            will-change: transform; z-index: 5;
+        }
+        .safe-needle {
+            position: absolute; bottom: 50%; left: 50%;
+            width: 4px; height: 45%; background: #ef4444;
+            transform: translateX(-50%); box-shadow: 0 0 10px #ef4444;
+            border-radius: 2px 2px 0 0;
+        }
+        .safe-hub {
+            position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            width: 70px; height: 70px; background: #475569;
+            border-radius: 50%; border: 4px solid #1e293b;
+            display: flex; align-items: center; justify-content: center;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.5); z-index: 10;
+        }
+
+        /* --- CARDS & EMOJI CENTERING --- */
+        .card-visual {
+            position: relative; width: 100%; height: 100%;
+            border-radius: 8px; overflow: hidden;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.7);
+        }
+        
+        .emoji-wrap {
+            position: absolute; top: 0; left: 0; right: 0; bottom: 18px;
+            display: flex; align-items: center; justify-content: center;
+            z-index: 10; pointer-events: none;
+        }
+        .emoji-wrap-3d {
+            position: absolute; top: 0; left: 0; right: 0; bottom: 65px;
+            display: flex; align-items: center; justify-content: center;
+            z-index: 10; pointer-events: none;
+        }
+        
+        .card-emoji { font-size: 24px; filter: drop-shadow(0px 2px 4px rgba(0,0,0,0.8)); }
+        .card-3d-emoji { font-size: 100px; filter: drop-shadow(0px 10px 15px rgba(0,0,0,0.8)); }
+        
+        .card-locked { filter: grayscale(100%) brightness(0.2); border-color: #222 !important; }
+        
+        .card-name {
+            position: absolute; bottom: 0; width: 100%; height: 18px;
+            background: rgba(0,0,0,0.9); font-size: 9px; font-weight: bold;
+            display: flex; align-items: center; justify-content: center;
+            border-top: 1px solid rgba(255,255,255,0.1); z-index: 20;
+        }
+
+        /* --- TRADE & SHOP --- */
+        .trade-board {
+            flex: 1; display: flex; flex-direction: column;
+            background: radial-gradient(circle at center, #1e293b, #0f172a);
+            border-radius: 12px; border: 1px solid #334155; overflow: hidden;
+        }
+        .trade-zone {
+            flex: 1; padding: 12px; display: flex; flex-wrap: wrap;
+            align-content: flex-start; gap: 8px; position: relative;
+        }
+        
+        .trade-divider {
+            height: 64px; background: #0f172a;
+            border-top: 2px solid #334155; border-bottom: 2px solid #334155;
+            display: flex; align-items: center; justify-content: center; gap: 24px;
+            z-index: 10; box-shadow: 0 0 20px rgba(0,0,0,0.5);
+        }
+        
+        .card-on-table { width: 55px; height: 80px; transition: transform 0.2s; cursor: pointer; animation: dropIn 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275); }
+        .card-on-table:active { transform: scale(0.9) !important; }
+        
+        .chat-bubble {
+            background: #1e293b; border: 1px solid #334155;
+            border-radius: 12px; padding: 12px; font-size: 13px; font-weight: 500;
+        }
+
+        /* --- 3D MODAL --- */
+        .perspective-container { perspective: 1200px; }
+        .card-3d {
+            transform-style: preserve-3d; transition: transform 0.1s ease-out;
+            will-change: transform; width: 100%; height: 100%;
+            border-radius: 16px; box-shadow: 0 30px 60px rgba(0,0,0,0.9);
+            border: 2px solid; position: relative; overflow: hidden;
+        }
+        
+        .toast {
+            position: absolute; top: 20px; left: 50%; transform: translateX(-50%) translateY(-20px);
+            background: rgba(0,0,0,0.95); color: #fff; padding: 12px 24px;
+            border-radius: 30px; font-size: 14px; font-weight: bold; opacity: 0;
+            pointer-events: none; transition: all 0.3s; z-index: 100;
+            border: 1px solid rgba(255,255,255,0.1); width: max-content;
+            max-width: 90%; text-align: center; box-shadow: 0 10px 30px rgba(0,0,0,0.8);
+        }
+        .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+    </style>
+</head>
+<body>
+
+<div id="app">
+    <!-- --- HEADER --- -->
+    <header class="px-4 py-3 bg-slate-900 border-b border-slate-800 flex items-center justify-between shadow-lg z-20 shrink-0">
+        <div class="flex items-center gap-2">
+            <div class="w-8 h-8 rounded-full bg-gradient-to-tr from-cyan-500 to-blue-600 flex items-center justify-center shadow-[0_0_10px_rgba(6,182,212,0.5)]">
+                <i class="ph-bold ph-cards text-white text-lg"></i>
+            </div>
+            <h1 class="font-bold text-lg tracking-wide text-white">HeistCards</h1>
+        </div>
+        <div class="flex flex-col items-end gap-1">
+            <div id="header-cards-count" class="text-[10px] font-mono bg-slate-800 px-2 py-0.5 rounded text-blue-400 border border-slate-700">0/50</div>
+            <div id="header-energy" class="text-[10px] font-bold text-yellow-400 flex items-center gap-1">
+                <i class="ph-fill ph-lightning"></i> <span id="energy-text">5/5</span>
+            </div>
+        </div>
+    </header>
+
+    <div id="toast" class="toast">Уведомление</div>
+
+    <!-- --- VIEW: MAP --- -->
+    <main id="view-map" class="view active">
+        <div class="p-3 bg-slate-900 border-b border-slate-800 text-center z-10 shrink-0 shadow-md">
+            <h2 class="text-lg font-black uppercase tracking-wider text-white" id="t_map_title">Карта Города</h2>
+            <div id="energy-timer" class="text-xs text-yellow-500 font-mono mt-1 hidden">Восстановление: 00:00</div>
+        </div>
+        
+        <div class="map-viewport" id="map-scroll">
+            <div class="city-world" id="city-builder">
+                <!-- Roads -->
+                <div class="road road-v" style="left: 200px;"></div>
+                <div class="road road-v" style="left: 550px;"></div>
+                <div class="road road-h" style="top: 250px;"></div>
+                <div class="road road-h" style="top: 650px;"></div>
+                
+                <!-- Shop Node -->
+                <div class="bank-node border-emerald-500 shadow-emerald-500/50" style="left: 400px; top: 120px;" onclick="switchView('view-shop')">
+                    <div class="bank-label text-emerald-300" id="t_bank_shop">Теневой Рынок</div>
+                    <i class="ph-fill ph-shopping-cart text-4xl text-emerald-400"></i>
+                </div>
+
+                <!-- Banks Nodes -->
+                <div class="bank-node border-slate-500 shadow-slate-500/50" style="left: 60px; top: 100px;" onclick="startHeist('atm')">
+                    <div class="bank-label text-slate-300"><i class="ph-bold ph-lightning text-yellow-400"></i> 1 | <span id="t_bank_1">Уличный Банкомат</span></div>
+                    <i class="ph-fill ph-storefront text-4xl text-slate-400"></i>
+                </div>
+
+                <div class="bank-node border-blue-500 shadow-blue-500/50" id="node-city" style="left: 350px; top: 400px;" onclick="startHeist('city')">
+                    <div class="bank-label text-blue-300"><i class="ph-bold ph-lightning text-yellow-400"></i> 2 | <span id="t_bank_2">Городской Банк</span></div>
+                    <i class="ph-fill ph-bank text-4xl text-blue-400"></i>
+                    <div class="absolute -top-3 -right-3 bg-red-600 text-white text-[10px] font-bold px-2 py-1 rounded shadow-lg hidden" id="lock-city">
+                        <i class="ph-bold ph-lock"></i> 10
+                    </div>
+                </div>
+
+                <div class="bank-node border-purple-500 shadow-purple-500/50" id="node-vault" style="left: 650px; top: 800px;" onclick="startHeist('vault')">
+                    <div class="bank-label text-purple-300"><i class="ph-bold ph-lightning text-yellow-400"></i> 3 | <span id="t_bank_3">Фед. Резерв</span></div>
+                    <i class="ph-fill ph-vault text-4xl text-purple-400"></i>
+                    <div class="absolute -top-3 -right-3 bg-red-600 text-white text-[10px] font-bold px-2 py-1 rounded shadow-lg hidden" id="lock-vault">
+                        <i class="ph-bold ph-lock"></i> 25
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- --- VIEW: SHOP (SHADOW MARKET) --- -->
+    <main id="view-shop" class="view bg-slate-900">
+        <div class="p-4 bg-slate-800 border-b border-slate-700 flex flex-col items-center shadow-md shrink-0">
+            <h2 class="text-xl font-black text-emerald-400 uppercase tracking-widest flex items-center gap-2">
+                <i class="ph-fill ph-shopping-cart"></i> <span id="t_shop_title">Теневой Рынок</span>
+            </h2>
+            <div class="text-xs text-slate-400 mt-1 font-mono" id="shop-timer">Обновление через: --:--</div>
+        </div>
+        <div class="flex-1 overflow-y-auto p-4 flex flex-col gap-4" id="shop-items-container">
+            <!-- Items injected by JS -->
+        </div>
+    </main>
+
+    <!-- SHOP PURCHASE MODAL -->
+    <div id="shop-buy-modal" class="absolute inset-0 z-[60] bg-black/95 flex flex-col hidden">
+        <div class="p-4 bg-slate-800 border-b border-slate-700 text-center shrink-0 shadow-lg">
+            <h3 class="text-lg font-bold text-white uppercase" id="t_shop_buy_title">Сделка с барыгой</h3>
+            <div class="text-xs text-emerald-400 mt-1" id="shop-buy-desc">Вы даёте ценность <span id="shop-cost-val" class="font-bold text-yellow-400">0</span> — Вы получаете карту</div>
+        </div>
+        
+        <div class="flex-1 flex flex-col overflow-hidden relative">
+            <div class="flex-1 flex flex-col items-center justify-center p-4">
+                <div class="text-sm font-bold text-slate-400 uppercase mb-2" id="t_shop_get">Вы получаете:</div>
+                <div class="w-32 h-44 pointer-events-none mb-6" id="shop-target-card"></div>
+                
+                <div class="text-sm font-bold text-slate-400 uppercase mb-2" id="t_shop_give">Вы даёте (клик по инвентарю):</div>
+                <div class="flex gap-2 flex-wrap justify-center min-h-[80px] w-full bg-slate-800/50 p-3 rounded-xl border border-slate-700" id="shop-player-zone">
+                    <!-- Cards selected to pay -->
+                </div>
+                <div class="mt-2 text-sm">
+                    <span class="text-slate-400" id="t_shop_val_offer">Ваше предложение:</span> <span id="shop-player-val" class="font-bold text-white">0</span> / <span id="shop-target-val" class="text-yellow-400 font-bold">0</span>
+                </div>
+            </div>
+
+            <div class="h-[100px] bg-slate-950 border-t border-slate-800 flex flex-col shrink-0">
+                <div id="shop-inventory-grid" class="flex-1 scrollable-x p-2 gap-2 items-center"></div>
+            </div>
+        </div>
+
+        <div class="p-4 bg-slate-900 border-t border-slate-800 flex gap-3 shrink-0">
+            <button id="btn-shop-cancel" class="flex-1 py-3 bg-slate-800 text-slate-300 font-bold rounded-xl active:scale-95 transition-transform" id="t_shop_cancel">Отмена</button>
+            <button id="btn-shop-confirm" class="flex-1 py-3 bg-slate-700 text-slate-500 font-bold rounded-xl pointer-events-none transition-colors uppercase" id="t_shop_confirm">Купить</button>
+        </div>
+    </div>
+
+    <!-- --- VIEW: SAFE HACKING --- -->
+    <main id="view-safe" class="view bg-slate-900">
+        <div class="flex-1 flex flex-col items-center justify-center p-4 relative">
+            <button class="absolute top-4 left-4 text-slate-400 flex items-center gap-1 p-2 bg-slate-800 rounded-lg active:scale-95" onclick="switchView('view-map')">
+                <i class="ph-bold ph-arrow-left"></i> <span id="t_back">Отмена</span>
+            </button>
+            
+            <h2 id="safe-title" class="text-2xl font-black text-white mb-8 text-center uppercase tracking-widest">Взлом</h2>
+
+            <div id="safe-game-ui" class="w-full flex flex-col items-center">
+                <div class="safe-ring mb-12">
+                    <div id="safe-zone" class="safe-zone"></div>
+                    <div class="safe-needle-box"><div class="safe-needle"></div></div>
+                    <div class="safe-hub"><i class="ph-fill ph-lock-key text-3xl text-slate-400" id="safe-lock-icon"></i></div>
+                    <div class="absolute -bottom-8 left-1/2 transform -translate-x-1/2 flex gap-3" id="safe-stages"></div>
+                </div>
+                <button id="btn-safe-action" class="w-full max-w-[240px] py-4 rounded-xl font-black text-xl active:translate-y-[6px] transition-all text-white uppercase" id="t_safe_start">
+                    СТАРТ
+                </button>
+            </div>
+
+            <div id="safe-reward-ui" class="hidden w-full flex-col items-center">
+                <h3 class="text-3xl font-black text-yellow-400 mb-6 uppercase drop-shadow-lg" id="t_safe_won">Куш взят!</h3>
+                <div class="w-48 h-64 mb-8" id="safe-reward-card"></div>
+                <button class="w-full max-w-[240px] py-4 rounded-xl font-black text-xl bg-blue-600 text-white shadow-[0_6px_0_#1e3a8a] active:shadow-none active:translate-y-[6px] transition-all uppercase" onclick="switchView('view-map')" id="t_safe_claim">
+                    Забрать
+                </button>
+            </div>
+        </div>
+    </main>
+
+    <!-- --- VIEW: COLLECTION --- -->
+    <main id="view-collection" class="view bg-slate-900">
+        <div class="p-4 bg-slate-800 border-b border-slate-700 flex justify-between items-center shadow-md shrink-0">
+            <h2 class="text-xl font-black text-white uppercase" id="t_coll_title">Коллекция</h2>
+            <div class="text-sm text-slate-400">
+                <span id="t_coll_owned">Уникальных:</span> 
+                <span id="coll-progress" class="text-cyan-400 font-bold">0/50</span>
+            </div>
+        </div>
+        <div id="collection-grid" class="flex-1 scrollable p-4 grid grid-cols-4 gap-3 content-start pb-8"></div>
+    </main>
+
+    <!-- --- VIEW: TRADE --- -->
+    <main id="view-trade" class="view bg-slate-900 flex-col">
+        <div id="trade-hub-status" class="p-4 bg-slate-800 border-b border-slate-700 flex items-center justify-center shadow-md shrink-0">
+            <div class="text-center">
+                <i class="ph-bold ph-users text-3xl text-slate-400 mb-2"></i>
+                <div class="text-sm font-bold text-slate-300" id="trade-status-text">Ожидание торговца...</div>
+            </div>
+        </div>
+
+        <div id="trade-active-ui" class="hidden flex-1 flex-col overflow-hidden">
+            <div class="p-3 bg-slate-800 border-b border-slate-700 flex items-center gap-3 shrink-0">
+                <div id="bot-avatar" class="text-3xl bg-slate-700 w-12 h-12 rounded-full flex items-center justify-center shadow-inner">🤖</div>
+                <div class="flex-1">
+                    <!-- FIX: Убран дубликат ID -->
+                    <div class="font-bold text-white text-sm" id="t_bot_name">Бот</div>
+                    <div id="bot-chat" class="text-xs text-cyan-400 font-medium mt-0.5 line-clamp-2">Привет! Давай торговаться.</div>
+                </div>
+            </div>
+
+            <div class="flex-1 flex flex-col p-3 overflow-hidden relative">
+                <div class="trade-board">
+                    <div class="trade-zone" id="zone-bot">
+                        <div class="absolute top-2 right-2 text-[10px] font-bold text-red-400 uppercase opacity-30 pointer-events-none" id="t_trade_bot">Бот</div>
+                    </div>
+                    
+                    <div class="trade-divider">
+                        <button id="btn-trade-reject" class="w-14 h-14 rounded-full bg-slate-800 border-2 border-slate-600 text-red-500 flex items-center justify-center active:scale-90 transition-transform hover:bg-red-500/20 shadow-lg cursor-pointer">
+                            <i class="ph-bold ph-x text-2xl"></i>
+                        </button>
+                        
+                        <button id="btn-trade-add" class="w-14 h-14 rounded-full bg-slate-800 border-2 border-slate-600 text-cyan-500 flex items-center justify-center active:scale-90 transition-transform hover:bg-cyan-500/20 shadow-lg cursor-pointer">
+                            <i class="ph-bold ph-plus text-2xl"></i>
+                        </button>
+                        
+                        <button id="btn-trade-accept" class="w-14 h-14 rounded-full bg-slate-800 border-2 border-slate-600 text-green-500 flex items-center justify-center active:scale-90 transition-transform hover:bg-green-500/20 shadow-lg cursor-pointer">
+                            <i class="ph-bold ph-check text-2xl"></i>
+                        </button>
+                    </div>
+
+                    <div class="trade-zone" id="zone-player">
+                        <div class="absolute bottom-2 right-2 text-[10px] font-bold text-cyan-400 uppercase opacity-30 pointer-events-none" id="t_trade_you">Вы</div>
+                    </div>
+                </div>
+                <div class="text-center text-[10px] text-slate-500 uppercase font-bold mt-2" id="t_trade_hint">Клик: Убрать / Зажать: 3D</div>
+            </div>
+
+            <div class="h-[100px] bg-slate-950 border-t border-slate-800 flex flex-col shrink-0">
+                <div id="trade-inventory-grid" class="flex-1 scrollable-x p-2 gap-2 items-center"></div>
+            </div>
+        </div>
+    </main>
+
+    <!-- --- VIEW: SETTINGS --- -->
+    <main id="view-settings" class="view bg-slate-900 scrollable">
+        <div class="p-6 flex flex-col gap-6 h-full">
+            <h2 class="text-2xl font-black text-white border-b border-slate-700 pb-3 uppercase" id="t_set_title">Настройки</h2>
+            
+            <div class="bg-slate-800 p-4 rounded-xl border border-slate-700">
+                <div class="text-slate-400 text-sm mb-1" id="t_set_total">Всего карт (с дубликатами):</div>
+                <div class="text-2xl font-bold text-cyan-400" id="total-cards-settings">0</div>
+            </div>
+
+            <div class="space-y-4">
+                <div>
+                    <label class="text-sm font-bold text-slate-400 uppercase mb-2 block" id="t_set_lang">Язык / Language</label>
+                    <div class="grid grid-cols-2 gap-3" id="lang-buttons">
+                        <button data-lang="ru" class="lang-btn py-3 rounded-xl font-bold border-2">Русский</button>
+                        <button data-lang="en" class="lang-btn py-3 rounded-xl font-bold border-2">English</button>
+                    </div>
+                </div>
+
+                <div class="bg-slate-800 p-4 rounded-xl border border-slate-700 flex items-center justify-between">
+                    <div>
+                        <div class="font-bold text-white" id="t_set_sound">Звуки</div>
+                        <div class="text-xs text-slate-400" id="t_set_sound_desc">Мягкие звуки интерфейса</div>
+                    </div>
+                    <label class="relative inline-flex items-center cursor-pointer">
+                        <input type="checkbox" id="toggle-sound" class="sr-only peer" checked>
+                        <div class="w-11 h-6 bg-slate-600 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-cyan-500"></div>
+                    </label>
+                </div>
+
+                <div class="bg-slate-800 p-4 rounded-xl border border-slate-700">
+                    <label class="text-sm font-bold text-slate-400 uppercase mb-2 block" id="t_set_promo">Промокод</label>
+                    <div class="flex gap-2">
+                        <input type="text" id="input-promo" class="flex-1 bg-slate-900 border border-slate-600 rounded-lg px-3 py-2 text-white outline-none focus:border-cyan-500 transition-colors" placeholder="...">
+                        <button id="btn-promo-apply" class="px-4 bg-cyan-600 text-white font-bold rounded-lg active:scale-95 transition-transform">OK</button>
+                    </div>
+                </div>
+
+                <div id="admin-panel" class="hidden mt-6 p-4 border-2 border-red-900 bg-red-900/20 rounded-xl">
+                    <h3 class="font-bold text-red-500 mb-2 flex items-center gap-2"><i class="ph-bold ph-warning"></i> ADMIN PANEL</h3>
+                    <div class="flex flex-wrap gap-2">
+                        <button id="adm-energy" class="bg-red-800 hover:bg-red-700 text-white px-3 py-2 text-xs font-bold rounded">Max Energy</button>
+                        <button id="adm-cards" class="bg-red-800 hover:bg-red-700 text-white px-3 py-2 text-xs font-bold rounded">Give All Cards</button>
+                        <button id="adm-kspt" class="bg-purple-800 hover:bg-purple-700 text-white px-3 py-2 text-xs font-bold rounded">Test KSPT Modal</button>
+                    </div>
+                    <div class="mt-3 text-xs text-red-200 flex items-center gap-2">
+                        Force Bot Greed (0.1 - 2.0): 
+                        <input type="number" id="adm-greed" step="0.1" class="w-16 bg-slate-900 text-white p-1 border border-red-800 rounded outline-none text-center">
+                    </div>
+                    <div class="text-[10px] text-red-400 mt-1">Leave empty for normal random greed. Greed 0.1 = Very generous bot. Greed 2.0 = Very greedy bot.</div>
+                </div>
+            </div>
+            <!-- Кнопка сброса окончательно удалена -->
+        </div>
+    </main>
+
+    <!-- --- BOTTOM NAVIGATION --- -->
+    <nav class="flex bg-slate-800 border-t border-slate-700 shrink-0 z-20" style="padding-bottom: env(safe-area-inset-bottom, 0px);">
+        <button class="nav-btn flex-1 py-3 flex flex-col items-center justify-center gap-1 text-slate-400" data-target="view-map">
+            <i class="ph ph-map-pin text-2xl nav-icon"></i><span class="text-[10px] font-bold uppercase" id="t_nav_map">Карта</span>
+        </button>
+        <button class="nav-btn flex-1 py-3 flex flex-col items-center justify-center gap-1 text-slate-400" data-target="view-collection">
+            <i class="ph ph-squares-four text-2xl nav-icon"></i><span class="text-[10px] font-bold uppercase" id="t_nav_coll">Карты</span>
+        </button>
+        <button class="nav-btn flex-1 py-3 flex flex-col items-center justify-center gap-1 text-slate-400" data-target="view-trade">
+            <i class="ph ph-arrows-left-right text-2xl nav-icon"></i><span class="text-[10px] font-bold uppercase" id="t_nav_trade">Трейд</span>
+        </button>
+        <button class="nav-btn flex-1 py-3 flex flex-col items-center justify-center gap-1 text-slate-400" data-target="view-settings">
+            <i class="ph ph-gear text-2xl nav-icon"></i><span class="text-[10px] font-bold uppercase" id="t_nav_set">Опции</span>
+        </button>
+    </nav>
+
+    <!-- --- 3D MODAL --- -->
+    <div id="modal-3d" class="absolute inset-0 z-50 bg-black/95 flex flex-col items-center justify-center p-6 hidden">
+        <button id="btn-close-modal" class="absolute top-6 right-6 w-12 h-12 bg-slate-800 rounded-full flex items-center justify-center text-white border border-slate-600 active:scale-90 transition-transform z-50">
+            <i class="ph-bold ph-x text-2xl"></i>
+        </button>
+        
+        <div class="perspective-container w-64 h-80 sm:w-80 sm:h-[420px]" id="card-3d-wrapper">
+            <div id="card-3d-element" class="card-3d">
+                <!-- Inner HTML is generated via JS -->
+            </div>
+        </div>
+        
+        <div id="sell-btn-container" class="mt-8 hidden z-50">
+            <button id="btn-sell-dup" class="px-6 py-3 bg-yellow-600 hover:bg-yellow-500 text-white font-bold rounded-full shadow-lg flex items-center gap-2 active:scale-95 transition-transform border border-yellow-400">
+                <i class="ph-bold ph-coins text-xl"></i> <span id="t_sell_dup">Продать дубликат (+1 ⚡)</span>
+            </button>
+        </div>
+    </div>
+
+    <!-- --- KSPT PROMO MODAL (45/50 REWARD) --- -->
+    <div id="modal-kspt" class="absolute inset-0 z-[70] bg-black/95 hidden flex-col items-center justify-center p-6 text-center">
+        <h2 class="text-3xl font-black text-cyan-400 mb-4 drop-shadow-[0_0_10px_rgba(6,182,212,0.8)]" id="t_kspt_title">Грандиозный Успех!</h2>
+        <p class="text-slate-300 mb-8 max-w-sm" id="t_kspt_desc">Вы собрали 45/50 уникальных карт! Заберите эксклюзивный промокод на скин KSPT!</p>
+        
+        <div class="mb-8 w-40 h-40 bg-slate-800 rounded-2xl flex items-center justify-center overflow-hidden border-4 border-cyan-500 shadow-[0_0_30px_#06b6d4]">
+             <img src="kspt.png" onerror="this.outerHTML='<div class=\\'text-[100px]\\'>🪙</div>'" class="w-full h-full object-cover">
+        </div>
+        
+        <button id="btn-kspt-claim" class="bg-gradient-to-r from-cyan-600 to-blue-600 text-white font-black text-xl py-4 px-8 rounded-full shadow-[0_0_20px_rgba(37,99,235,0.5)] active:scale-95 transition-transform mb-6">
+            <span id="t_kspt_btn">Получить Промокод</span>
+        </button>
+        
+        <button id="btn-kspt-close" class="text-slate-500 underline font-bold active:scale-95 transition-transform" style="display:none;">
+            <span id="t_kspt_close">Закрыть</span>
+        </button>
+    </div>
+</div>
+
+<script>
+/* ==========================================================================
+   1. SOFTER, PLEASANT AUDIO SYSTEM
+   ========================================================================== */
+const AudioSys = {
+    ctx: null,
+    init() {
+        if (!this.ctx) {
+            const AudioContext = window.AudioContext || window.webkitAudioContext;
+            this.ctx = new AudioContext();
+        }
+    },
+    play(type) {
+        if (!state.sound) return;
+        this.init();
+        if (this.ctx.state === 'suspended') this.ctx.resume();
+        
+        const audioT = this.ctx.currentTime;
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        
+        osc.connect(gain); gain.connect(this.ctx.destination);
+        
+        if (type === 'click') {
+            osc.type = 'sine'; osc.frequency.setValueAtTime(250, audioT); osc.frequency.exponentialRampToValueAtTime(50, audioT + 0.05);
+            gain.gain.setValueAtTime(0.04, audioT); gain.gain.exponentialRampToValueAtTime(0.001, audioT + 0.05);
+            osc.start(audioT); osc.stop(audioT + 0.05);
+        } else if (type === 'success') {
+            osc.type = 'sine'; osc.frequency.setValueAtTime(500, audioT); osc.frequency.setValueAtTime(800, audioT + 0.1);
+            gain.gain.setValueAtTime(0.03, audioT); gain.gain.linearRampToValueAtTime(0, audioT + 0.4);
+            osc.start(audioT); osc.stop(audioT + 0.4);
+        } else if (type === 'error') {
+            osc.type = 'sine'; osc.frequency.setValueAtTime(150, audioT); osc.frequency.setValueAtTime(100, audioT + 0.15);
+            gain.gain.setValueAtTime(0.05, audioT); gain.gain.linearRampToValueAtTime(0, audioT + 0.15);
+            osc.start(audioT); osc.stop(audioT + 0.15);
+        } else if (type === 'coin') {
+            osc.type = 'sine'; osc.frequency.setValueAtTime(1200, audioT); osc.frequency.setValueAtTime(2000, audioT + 0.1);
+            gain.gain.setValueAtTime(0.02, audioT); gain.gain.exponentialRampToValueAtTime(0.001, audioT + 0.15);
+            osc.start(audioT); osc.stop(audioT + 0.15);
+        }
+    }
+};
+
+/* ==========================================================================
+   2. 50 EMOJIS & 50 UNIQUE PERCENTAGE-BASED CSS PATTERNS
+   ========================================================================== */
+const EMOJIS = [
+    "⭐","🌲","🚀","🤡","🌵","💎","🔥","💧","⚡","❄️", 
+    "🍄","🍁","🌙","☀️","🍎","🍒","🍉","🍕","🍔","🍟", 
+    "🚗","🚓","🚜","🚁","🛸","⛵","⚓","⛩️","🌋","⛺", 
+    "⚽","🏀","🏈","⚾","🎾","🎱","🎯","🎳","🎮","🎲", 
+    "🎸","🎺","🎻","🥁","🎧","🎤","🎭","🎨","🎬","📸"  
+];
+
+const RARITIES = [
+    { id: 'common', c1: '#94a3b8', c2: '#475569', val: 1, txt: 'text-slate-300' },
+    { id: 'rare', c1: '#3b82f6', c2: '#1e3a8a', val: 5, txt: 'text-blue-300' },
+    { id: 'epic', c1: '#a855f7', c2: '#581c87', val: 25, txt: 'text-purple-300' },
+    { id: 'legendary', c1: '#eab308', c2: '#713f12', val: 100, txt: 'text-yellow-300' },
+    { id: 'secret', c1: '#f43f5e', c2: '#881337', val: 500, txt: 'text-rose-300' }
+];
+
+const CARD_NAMES_RU = [
+    "Звезда","Лес","Космос","Шут","Пустыня","Кристалл","Пламя","Океан","Шок","Иней",
+    "Гриб","Осень","Луна","Солнце","Яблоко","Вишня","Арбуз","Пицца","Бургер","Фри",
+    "Авто","Коп","Ферма","Хели","НЛО","Яхта","Якорь","Храм","Вулкан","Кэмп",
+    "Гол","Данк","Тачдаун","Хоумран","Эйс","Шар","Дротик","Страйк","Геймер","Кости",
+    "Гитара","Труба","Скрипка","Драм","Бит","Голос","Маска","Холст","Мотор","Вспышка"
+];
+const CARD_NAMES_EN = [
+    "Star","Forest","Space","Joker","Desert","Crystal","Flame","Ocean","Shock","Frost",
+    "Shroom","Autumn","Moon","Sun","Apple","Cherry","Melon","Pizza","Burger","Fries",
+    "Auto","Cop","Farm","Heli","UFO","Yacht","Anchor","Shrine","Volcano","Camp",
+    "Goal","Dunk","Touchdown","Homerun","Ace","Eight","Dart","Strike","Gamer","Dice",
+    "Guitar","Trumpet","Violin","Drum","Beat","Voice","Mask","Canvas","Motor","Flash"
+];
+
+const PATTERN_GEN = [
+    (c1,c2) => `linear-gradient(90deg, ${c1} 50%, ${c2} 50%)`,
+    (c1,c2) => `radial-gradient(circle at 50% 50%, ${c1} 40%, ${c2} 41%)`,
+    (c1,c2) => `repeating-linear-gradient(45deg, ${c1}, ${c1} 10%, ${c2} 10%, ${c2} 20%)`,
+    (c1,c2) => `linear-gradient(rgba(255,255,255,0.1) 10%, transparent 10%), linear-gradient(90deg, rgba(255,255,255,0.1) 10%, transparent 10%), linear-gradient(${c1}, ${c2}); background-size: 20% 20%`,
+    (c1,c2) => `conic-gradient(${c1} 90deg, ${c2} 90deg 180deg, ${c1} 180deg 270deg, ${c2} 270deg); background-size: 50% 50%`,
+    (c1,c2) => `linear-gradient(135deg, ${c1} 25%, transparent 25%) -10% 0, linear-gradient(225deg, ${c1} 25%, transparent 25%) -10% 0, linear-gradient(315deg, ${c1} 25%, transparent 25%), linear-gradient(45deg, ${c1} 25%, transparent 25%), ${c2}; background-size: 25% 25%`,
+    (c1,c2) => `repeating-radial-gradient(circle at 50% 50%, ${c1}, ${c1} 10%, ${c2} 10%, ${c2} 20%)`,
+    (c1,c2) => `repeating-linear-gradient(0deg, ${c1}, ${c1} 5%, ${c2} 5%, ${c2} 25%)`,
+    (c1,c2) => `linear-gradient(45deg, ${c1} 25%, transparent 25%, transparent 75%, ${c1} 75%, ${c1}), linear-gradient(45deg, ${c1} 25%, transparent 25%, transparent 75%, ${c1} 75%, ${c1}) 15% 15%, ${c2}; background-size: 30% 30%`,
+    (c1,c2) => `repeating-conic-gradient(from 0deg, ${c1} 0deg 15deg, ${c2} 15deg 30deg)`,
+    (c1,c2) => `radial-gradient(circle at 0% 50%, rgba(255,255,255,0.2) 20%, transparent 21%), radial-gradient(circle at 100% 50%, rgba(255,255,255,0.2) 20%, transparent 21%), linear-gradient(${c1},${c2}); background-size: 40% 40%, 40% 40%, 100% 100%`,
+    (c1,c2) => `repeating-radial-gradient(ellipse at center, ${c1} 0, ${c1} 5%, transparent 5%, transparent 15%), ${c2}`,
+    (c1,c2) => `linear-gradient(60deg, ${c1} 25%, transparent 25%, transparent 75%, ${c1} 75%, ${c1}), linear-gradient(60deg, ${c1} 25%, transparent 25%, transparent 75%, ${c1} 75%, ${c1}) 15% 26%, ${c2}; background-size: 30% 52%`,
+    (c1,c2) => `radial-gradient(circle, transparent 20%, ${c2} 20%, ${c2} 80%, transparent 80%, transparent), radial-gradient(circle, transparent 20%, ${c2} 20%, ${c2} 80%, transparent 80%, transparent) 25% 25%, linear-gradient(${c1}, ${c1}); background-size: 50% 50%`,
+    (c1,c2) => `conic-gradient(from 45deg at 50% 50%, ${c1} 0, ${c1} 90deg, ${c2} 90deg, ${c2} 180deg, ${c1} 180deg, ${c1} 270deg, ${c2} 270deg)`,
+    (c1,c2) => `repeating-linear-gradient(135deg, rgba(0,0,0,0.2), rgba(0,0,0,0.2) 5%, transparent 5%, transparent 10%), linear-gradient(to right, ${c1}, ${c2})`,
+    (c1,c2) => `radial-gradient(circle at 100% 150%, ${c1} 24%, ${c2} 24%, ${c2} 28%, ${c1} 28%, ${c1} 36%, ${c2} 36%, ${c2} 40%, transparent 40%, transparent), radial-gradient(circle at 0 150%, ${c1} 24%, ${c2} 24%, ${c2} 28%, ${c1} 28%, ${c1} 36%, ${c2} 36%, ${c2} 40%, transparent 40%, transparent), ${c1}; background-size: 50% 50%`,
+    (c1,c2) => `repeating-linear-gradient(-45deg, transparent, transparent 10%, rgba(255,255,255,0.1) 10%, rgba(255,255,255,0.1) 20%), linear-gradient(to bottom, ${c1}, ${c2})`,
+    (c1,c2) => `radial-gradient(circle, ${c1} 10%, transparent 11%), radial-gradient(circle, ${c1} 10%, transparent 11%) 15% 15%, ${c2}; background-size: 30% 30%`,
+    (c1,c2) => `linear-gradient(90deg, rgba(255,255,255,0.1) 50%, transparent 50%), linear-gradient(rgba(255,255,255,0.1) 50%, transparent 50%), ${c1}; background-size: 20% 20%`,
+];
+
+for (let k = 20; k < 50; k++) {
+    const scale = (k % 5) * 5 + 10;
+    const angle = (k * 17) % 360;
+    if (k % 3 === 0) {
+        PATTERN_GEN.push((c1,c2) => `repeating-linear-gradient(${angle}deg, ${c1}, ${c1} ${scale}%, ${c2} ${scale}%, ${c2} ${scale*2}%)`);
+    } else if (k % 3 === 1) {
+        PATTERN_GEN.push((c1,c2) => `radial-gradient(circle at 50% 50%, ${c1} ${scale}%, transparent ${scale}%), ${c2}; background-size: ${scale*2}% ${scale*2}%`);
+    } else {
+        PATTERN_GEN.push((c1,c2) => `conic-gradient(from ${angle}deg, ${c1} 0 25%, ${c2} 0 50%, ${c1} 0 75%, ${c2} 0 100%); background-size: ${scale}% ${scale}%`);
+    }
+}
+
+const CARDS_DB = [];
+for (let i = 0; i < 50; i++) {
+    const rIdx = Math.floor(i / 10);
+    const r = RARITIES[rIdx];
+    CARDS_DB.push({
+        id: i + 1, rarity: r.id, value: r.val,
+        nameRU: CARD_NAMES_RU[i], nameEN: CARD_NAMES_EN[i],
+        emoji: EMOJIS[i], rColor: r.c1, txtColor: r.txt, css: PATTERN_GEN[i](r.c1, r.c2)
+    });
+}
+
+/* ==========================================================================
+   3. MASSIVE BOT DICTIONARY & LOCALIZATION
+   ========================================================================== */
+const BOT_PHRASES = {
+    ru: {
+        hello: [
+            "Давай посмотрим, что у тебя есть.", "Привет! Предлагай карты.", "Я сегодня добрый. Давай меняться.", 
+            "Покажи свой инвентарь.", "Надеюсь, у тебя есть что-то ценное.", "Торг уместен. Начинай.",
+            "Что покажешь?", "Я ищу редкие экземпляры.", "Надеюсь, ты не с пустыми руками.", 
+            "Удиви меня.", "Какие карты на обмен?", "Я коллекционирую лучшие карты."
+        ],
+        add: [
+            "Хорошо, я добавлю эту карту.", "Уговорил, держи еще одну.", "Это кажется честным. Добавляю.", 
+            "Вот, так лучше.", "Могу накинуть еще это.", "Держи бонус.", "Ладно, это можно добавить."
+        ],
+        refuse_add: [
+            "Это слишком жирно для тебя.", "Я и так много даю.", "Ты шутишь? Больше не дам.", 
+            "Это мой предел.", "Ни за что. Хватит с тебя.", "Ты просишь слишком много.", "Нет, это перебор."
+        ],
+        no_cards: [
+            "У меня больше нет подходящих карт.", "Мой стол пуст.", "Я отдал всё, что мог.", "Больше мне нечего предложить."
+        ],
+        reject: [
+            "Меня это не устраивает. Я ухожу.", "Сделка отменяется.", "Не трать мое время.", "Я пойду поищу кого-то другого."
+        ],
+        accept: [
+            "По рукам! Отличная сделка.", "Согласен. Держи карты.", "Это было выгодно. Удачи!", "Приятно иметь с тобой дело."
+        ],
+        need_more: [
+            "Этого мало. Добавляй еще.", "Ты смеешься? Нужно больше.", "Это копейки. Клади еще карты.", "Мои карты стоят дороже."
+        ],
+        zero: [
+            "Ты ничего не предложил!", "Стол пуст. Положи карты.", "Я не меняю воздух на карты."
+        ],
+        empty_inv: [
+            "Я вижу, у тебя больше ничего нет. Я ухожу.", "У тебя пустой карман. Сделка отменена.", "Больше нет карт? Тогда прощай."
+        ]
+    },
+    en: {
+        hello: [
+            "Let's see what you've got.", "Hi! Offer your cards.", "I'm feeling generous today.", 
+            "Show me your inventory.", "Hope you have something valuable.", "Trading is open. You start.",
+            "What will you show me?", "Looking for rare pieces.", "Hope you're not empty-handed.", 
+            "Surprise me.", "What cards for trade?", "I collect the best."
+        ],
+        add: [
+            "Fine, I'll add this card.", "You convinced me, here's another.", "Seems fair. Adding this.", 
+            "There, that's better.", "I can throw this in.", "Here's a bonus.", "Okay, I can add this."
+        ],
+        refuse_add: [
+            "You're asking for too much.", "I'm already giving a lot.", "Are you kidding? No more.", 
+            "That's my limit.", "No way. That's enough.", "You demand too much.", "No, that's overkill."
+        ],
+        no_cards: [
+            "I don't have any more cards to offer.", "My table is empty.", "I've given all I can.", "Nothing else to offer."
+        ],
+        reject: [
+            "I'm not doing this. I'm leaving.", "Trade canceled.", "Don't waste my time.", "I'll go find someone else."
+        ],
+        accept: [
+            "Deal! Pleasure doing business.", "Agreed. Take the cards.", "That was profitable. Good luck!", "Nice trading with you."
+        ],
+        need_more: [
+            "Not enough. Add more.", "Are you joking? I need more.", "That's pennies. Put more cards.", "My cards are worth more."
+        ],
+        zero: [
+            "You offered nothing!", "The table is empty. Place cards.", "I don't trade air for cards."
+        ],
+        empty_inv: [
+            "I see you have nothing left. I'm leaving.", "Your pockets are empty. Trade canceled.", "No more cards? Goodbye then."
+        ]
+    }
+};
+
+const DICT = {
+    ru: {
+        t_nav_map: "Карта", t_nav_coll: "Карты", t_nav_trade: "Трейд", t_nav_set: "Опции",
+        t_map_title: "Карта Города",
+        t_bank_1: "Уличный Банкомат", t_bank_2: "Городской Банк", t_bank_3: "Фед. Резерв", t_bank_shop: "Теневой Рынок",
+        t_shop_title: "Теневой Рынок", t_shop_buy_title: "Сделка с барыгой",
+        t_shop_get: "Вы получаете:", t_shop_give: "Вы даёте (клик по инвентарю):", t_shop_val_offer: "Ваше предложение:",
+        t_shop_cancel: "Отмена", t_shop_confirm: "Купить", t_shop_price: "Цена:",
+        t_back: "Отмена", t_safe_won: "Куш взят!", t_safe_claim: "Забрать", t_safe_start: "СТАРТ", t_safe_stop: "СТОП", t_safe_fail: "ПРОВАЛ",
+        t_coll_title: "Коллекция", t_coll_owned: "Уникальных:",
+        t_trade_hint: "Клик: Убрать / Зажать: 3D", t_trade_bot: "Бот", t_trade_you: "Вы", trade_wait: "Торговец в пути...", t_bot_name: "Бот",
+        t_set_title: "Настройки", t_set_lang: "Язык / Language", t_set_sound: "Звуки", 
+        t_set_sound_desc: "Мягкие звуки интерфейса", t_set_total: "Всего карт (с дубликатами):", t_set_promo: "Промокод",
+        t_sell_dup: "Продать дубликат (+1 ⚡)",
+        msg_reset: "Прогресс сброшен.", msg_cancel: "Сделка отменена.", msg_sold: "Продано! +1 ⚡", msg_energy: "Недостаточно энергии!", msg_trade_succ: "Обмен успешен!",
+        msg_promo_start: "Бонус получен: +1 Обычная карта!", msg_promo_used: "Код уже использован.", msg_promo_bad: "Неверный код.",
+        t_kspt_title: "Грандиозный Успех!", t_kspt_desc: "Вы собрали 45/50 уникальных карт! Заберите эксклюзивный промокод на скин KSPT!",
+        t_kspt_btn: "Получить Промокод", t_kspt_close: "Закрыть"
+    },
+    en: {
+        t_nav_map: "Map", t_nav_coll: "Cards", t_nav_trade: "Trade", t_nav_set: "Options",
+        t_map_title: "City Map",
+        t_bank_1: "Street ATM", t_bank_2: "City Bank", t_bank_3: "Fed. Vault", t_bank_shop: "Shadow Market",
+        t_shop_title: "Shadow Market", t_shop_buy_title: "Dealer's Offer",
+        t_shop_get: "You Get:", t_shop_give: "You Give (Tap Inventory):", t_shop_val_offer: "Your Offer:",
+        t_shop_cancel: "Cancel", t_shop_confirm: "Buy", t_shop_price: "Price:",
+        t_back: "Back", t_safe_won: "Loot Secured!", t_safe_claim: "Claim", t_safe_start: "START", t_safe_stop: "STOP", t_safe_fail: "FAIL",
+        t_coll_title: "Collection", t_coll_owned: "Unique:",
+        t_trade_hint: "Tap: Remove / Hold: 3D", t_trade_bot: "Bot", t_trade_you: "You", trade_wait: "Trader arrives in...", t_bot_name: "Bot",
+        t_set_title: "Settings", t_set_lang: "Language", t_set_sound: "Sounds", 
+        t_set_sound_desc: "Soft UI sound effects", t_set_total: "Total cards (with dupes):", t_set_promo: "Promo Code",
+        t_sell_dup: "Sell duplicate (+1 ⚡)",
+        msg_reset: "Progress wiped.", msg_cancel: "Trade canceled.", msg_sold: "Sold! +1 ⚡", msg_energy: "Not enough energy!", msg_trade_succ: "Trade Successful!",
+        msg_promo_start: "Bonus received: +1 Common Card!", msg_promo_used: "Code already used.", msg_promo_bad: "Invalid code.",
+        t_kspt_title: "Epic Success!", t_kspt_desc: "You collected 45/50 unique cards! Claim your exclusive promo code for the KSPT skin!",
+        t_kspt_btn: "Claim Promo Code", t_kspt_close: "Close"
+    }
+};
+
+let state = {
+    lang: 'ru',
+    sound: true,
+    inv: {},
+    energy: 5,
+    lastEnergyTime: Date.now(),
+    tradeCooldown: 0,
+    activeTrade: null,
+    shop: { hour: 0, items: [] },
+    usedPromos: [],
+    admin: false,
+    adminGreed: null,
+    ksptClaimed: false
+};
+
+function loadState() {
+    try {
+        const s = localStorage.getItem('HeistCardsPerfect');
+        if (s) {
+            const p = JSON.parse(s);
+            state = { ...state, ...p };
+        } else {
+            state.inv = { 1: 3, 2: 1 };
+        }
+    } catch(e) {}
+    
+    document.getElementById('toggle-sound').checked = state.sound;
+    
+    const now = Date.now();
+    const missedMs = now - state.lastEnergyTime;
+    if (state.energy < 5 && missedMs >= 60000) {
+        const gained = Math.floor(missedMs / 60000);
+        state.energy = Math.min(5, state.energy + gained);
+        state.lastEnergyTime += gained * 60000;
+        saveState();
+    }
+    
+    if (state.admin) document.getElementById('admin-panel').classList.remove('hidden');
+
+    updateLoc();
+    checkEnergy();
+    refreshShop();
+}
+
+function saveState() {
+    localStorage.setItem('HeistCardsPerfect', JSON.stringify(state));
+    updateMapLocks();
+    updateTotalCardsDisplay();
+    checkKSPTMilestone();
+}
+
+function t(key) { return DICT[state.lang][key] || key; }
+
+function getCardName(card) { return state.lang === 'en' ? card.nameEN : card.nameRU; }
+function getRarityName(rId) {
+    const map = { common: {ru: 'Обычный', en: 'Common'}, rare: {ru: 'Редкий', en: 'Rare'}, epic: {ru: 'Эпический', en: 'Epic'}, legendary: {ru: 'Легендарный', en: 'Legendary'}, secret: {ru: 'Секретный', en: 'Secret'} };
+    return map[rId][state.lang];
+}
+
+function getRandomPhrase(category) {
+    const phrases = BOT_PHRASES[state.lang][category];
+    return phrases[Math.floor(Math.random() * phrases.length)];
+}
+
+function updateLoc() {
+    const keys = Object.keys(DICT[state.lang]);
+    keys.forEach(k => {
+        const el = document.getElementById(k);
+        if(el) el.innerText = DICT[state.lang][k];
+    });
+    
+    document.querySelectorAll('.lang-btn').forEach(btn => {
+        if(btn.dataset.lang === state.lang) {
+            btn.className = "lang-btn py-3 rounded-xl font-bold border-2 border-cyan-500 bg-cyan-500/10 text-cyan-400";
+        } else {
+            btn.className = "lang-btn py-3 rounded-xl font-bold border-2 border-slate-700 text-slate-300 hover:bg-slate-800";
+        }
+    });
+
+    updateTotalCardsDisplay();
+    refreshShopUI();
+}
+
+function showToast(msg) {
+    const el = document.getElementById('toast');
+    el.innerText = msg;
+    el.classList.add('show');
+    setTimeout(() => el.classList.remove('show'), 2000);
+}
+
+/* ==========================================================================
+   ENERGY & KSPT
+   ========================================================================== */
+setInterval(checkEnergy, 1000);
+function checkEnergy() {
+    const now = Date.now();
+    if (state.energy < 5) {
+        const diff = now - state.lastEnergyTime;
+        if (diff >= 60000) {
+            const gained = Math.floor(diff / 60000);
+            state.energy = Math.min(5, state.energy + gained);
+            state.lastEnergyTime += gained * 60000;
+            saveState();
+        }
+    } else {
+        state.lastEnergyTime = now;
+    }
+    
+    const uniqueCount = Object.keys(state.inv).length;
+    document.getElementById('header-cards-count').innerText = `${uniqueCount}/50`;
+    document.getElementById('energy-text').innerText = `${state.energy}/5`;
+    
+    const timer = document.getElementById('energy-timer');
+    if (state.energy < 5) {
+        const left = 60 - Math.floor((now - state.lastEnergyTime) / 1000);
+        timer.innerText = `+1 ⚡ : ${left}s`;
+        timer.classList.remove('hidden');
+    } else {
+        timer.classList.add('hidden');
+    }
+}
+
+function consumeEnergy(amount) {
+    if(state.energy >= amount) {
+        state.energy -= amount; state.lastEnergyTime = Date.now(); saveState(); checkEnergy(); return true;
+    }
+    return false;
+}
+
+function updateTotalCardsDisplay() {
+    const total = Object.values(state.inv).reduce((a,b) => a+b, 0);
+    const el = document.getElementById('total-cards-settings');
+    if(el) el.innerText = total;
+}
+
+function checkKSPTMilestone() {
+    if (state.ksptClaimed) return;
+    const uniqueCount = Object.keys(state.inv).length;
+    if (uniqueCount >= 45) {
+        document.getElementById('modal-kspt').classList.remove('hidden');
+        document.getElementById('modal-kspt').style.display = 'flex';
+    }
+}
+
+document.getElementById('btn-kspt-claim').onclick = () => {
+    AudioSys.play('success');
+    const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ2345679";
+    let res = ['8', '@'];
+    for(let i=0; i<6; i++) res.push(chars.charAt(Math.floor(Math.random() * chars.length)));
+    for(let i=res.length-1; i>0; i--) { const j = Math.floor(Math.random() * (i + 1)); [res[i], res[j]] = [res[j], res[i]]; }
+    const code = res.join('');
+    
+    const el = document.createElement('textarea');
+    el.value = code; document.body.appendChild(el); el.select();
+    try { document.execCommand('copy'); } catch(err) { console.error('Copy failed'); }
+    document.body.removeChild(el);
+
+    state.ksptClaimed = true;
+    saveState();
+    
+    const btn = document.getElementById('btn-kspt-claim');
+    btn.innerHTML = `<span class="font-mono tracking-widest">${code}</span><div class="text-xs text-yellow-300 mt-1 uppercase">Скопировано!</div>`;
+    btn.style.pointerEvents = 'none';
+    document.getElementById('btn-kspt-close').style.display = 'block';
+};
+
+document.getElementById('btn-kspt-close').onclick = () => {
+    AudioSys.play('click');
+    document.getElementById('modal-kspt').classList.add('hidden');
+    document.getElementById('modal-kspt').style.display = 'none';
+};
+
+function getCardHTML(c, unl) {
+    return `
+        <div class="card-visual ${unl ? '' : 'card-locked'}" style="border: 2px solid ${unl ? c.rColor : '#333'};">
+            <div class="absolute inset-0" style="background: ${c.css};"></div>
+            <div class="emoji-wrap"><div class="card-emoji">${c.emoji}</div></div>
+            <div class="card-name ${unl ? c.txtColor : 'text-slate-500'}">${getCardName(c)}</div>
+        </div>
+    `;
+}
+
+/* ==========================================================================
+   CITY MAP & NAVIGATION
+   ========================================================================== */
+function buildCity() {
+    const world = document.getElementById('city-builder');
+    for(let i=0; i<40; i++) {
+        const rand = Math.random();
+        const el = document.createElement('div');
+        
+        if (rand > 0.6) {
+            el.className = 'tree';
+        } else if (rand > 0.3) {
+            el.className = 'bush';
+        } else {
+            el.className = 'house';
+            el.style.width = (30 + Math.random()*20) + 'px';
+            el.style.height = (30 + Math.random()*20) + 'px';
+        }
+        
+        let valid = false; let x,y;
+        while(!valid) {
+            x = Math.random() * 700; y = Math.random() * 900;
+            if(x > 150 && x < 280) continue;
+            if(x > 500 && x < 630) continue;
+            if(y > 200 && y < 330) continue;
+            if(y > 600 && y < 730) continue;
+            if(x > 30 && x < 190 && y > 70 && y < 230) continue; 
+            if(x > 320 && x < 480 && y > 370 && y < 530) continue; 
+            if(x > 620 && x < 780 && y > 770 && y < 930) continue; 
+            if(x > 370 && x < 530 && y > 90 && y < 250) continue; 
+            valid = true;
+        }
+        el.style.left = x + 'px';
+        el.style.top = y + 'px';
+        world.appendChild(el);
+    }
+}
+buildCity();
+
+function updateMapLocks() {
+    const uniqueCount = Object.keys(state.inv).length;
+    const nC = document.getElementById('node-city'); const lC = document.getElementById('lock-city');
+    if (uniqueCount >= 10) { nC.classList.remove('locked'); lC.classList.add('hidden'); } else { nC.classList.add('locked'); lC.classList.remove('hidden'); }
+    const nV = document.getElementById('node-vault'); const lV = document.getElementById('lock-vault');
+    if (uniqueCount >= 25) { nV.classList.remove('locked'); lV.classList.add('hidden'); } else { nV.classList.add('locked'); lV.classList.remove('hidden'); }
+}
+
+function switchView(tV) {
+    document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+    document.getElementById(tV).classList.add('active');
+    state.currentView = tV;
+    
+    document.querySelectorAll('.nav-btn').forEach(b => {
+        if (b.dataset.target === tV || (tV === 'view-safe' && b.dataset.target === 'view-map') || (tV === 'view-shop' && b.dataset.target === 'view-map')) {
+            b.classList.add('text-cyan-400'); b.classList.remove('text-slate-400'); b.querySelector('.nav-icon').classList.add('ph-fill');
+        } else {
+            b.classList.remove('text-cyan-400'); b.classList.add('text-slate-400'); b.querySelector('.nav-icon').classList.remove('ph-fill');
+        }
+    });
+
+    if (tV === 'view-collection') renderCollection();
+    if (tV === 'view-trade') checkTradeAccess();
+    if (tV === 'view-map') updateMapLocks();
+    if (tV === 'view-settings') updateTotalCardsDisplay();
+    if (tV === 'view-shop') { refreshShop(); setInterval(updateShopTimer, 1000); }
+    
+    AudioSys.play('click');
+}
+
+document.querySelectorAll('.nav-btn').forEach(btn => btn.onclick = (e) => switchView(e.currentTarget.dataset.target));
+
+/* ==========================================================================
+   SAFE MINIGAME
+   ========================================================================== */
+const BANKS = {
+    'atm': { cost: 1, s: 3, spd: 165, zw: 50, drop: [{r:'common',c:0.8},{r:'rare',c:0.2}] },
+    'city': { cost: 2, s: 4, spd: 200, zw: 45, drop: [{r:'common',c:0.2},{r:'rare',c:0.6},{r:'epic',c:0.2}] },
+    'vault': { cost: 3, s: 5, spd: 260, zw: 35, drop: [{r:'rare',c:0.4},{r:'epic',c:0.45},{r:'legendary',c:0.12},{r:'secret',c:0.03}] }
+};
+const safeData = { bank: null, bankId: null, stg: 0, ang: 0, act: false, spd: 0, dir: 1, zs: 0, zw: 60, fr: null, lt: 0 };
+
+function startHeist(id) {
+    const b = BANKS[id];
+    if (!consumeEnergy(b.cost)) { showToast(t('msg_energy')); AudioSys.play('error'); return; }
+    
+    safeData.bank = b; safeData.bankId = id; safeData.stg = 0; safeData.ang = 0; safeData.spd = b.spd; safeData.dir = 1; safeData.act = true; safeData.lt = performance.now();
+    
+    document.getElementById('safe-game-ui').classList.remove('hidden'); document.getElementById('safe-game-ui').style.display = 'flex';
+    document.getElementById('safe-reward-ui').classList.add('hidden'); document.getElementById('safe-reward-ui').style.display = 'none';
+    
+    const btn = document.getElementById('btn-safe-action'); btn.innerText = t('t_safe_start');
+    
+    let btnCls = id === 'atm' ? 'bg-slate-500 shadow-[0_6px_0_#334155]' : (id === 'city' ? 'bg-blue-500 shadow-[0_6px_0_#1d4ed8]' : 'bg-purple-500 shadow-[0_6px_0_#7e22ce]');
+    btn.className = `w-full max-w-[240px] py-4 rounded-xl font-black text-xl active:translate-y-[6px] active:shadow-none transition-all text-white uppercase ${btnCls}`;
+    
+    let lockCls = id === 'atm' ? 'text-slate-400' : (id === 'city' ? 'text-blue-400' : 'text-purple-400');
+    document.getElementById('safe-lock-icon').className = `ph-fill ph-lock-key text-3xl ${lockCls}`;
+    
+    let ringCol = id === 'atm' ? '#334155' : (id === 'city' ? '#1e3a8a' : '#581c87');
+    document.querySelector('.safe-ring').style.borderColor = ringCol;
+    
+    const dots = document.getElementById('safe-stages'); dots.innerHTML = '';
+    for(let i=0; i<b.s; i++) dots.innerHTML += `<div class="w-3 h-3 rounded-full border-2 bg-slate-800 border-slate-700" id="sdot-${i}"></div>`;
+    
+    switchView('view-safe'); setSafeZone(b.zw); updateSafeUI();
+    cancelAnimationFrame(safeData.fr); safeLoop(performance.now());
+}
+
+function setSafeZone(w) {
+    safeData.zw = w; let v = false;
+    while (!v) { safeData.zs = Math.random() * (360 - w); if (Math.abs(safeData.zs - safeData.ang) > 50) v = true; }
+    let r = safeData.bankId === 'atm' ? '100,116,139' : (safeData.bankId === 'city' ? '59,130,246' : '168,85,247');
+    document.getElementById('safe-zone').style.background = `conic-gradient(from ${safeData.zs}deg, transparent 0, rgba(${r},0.5) 0, rgba(${r},0.5) ${w}deg, transparent ${w}deg)`;
+}
+
+function safeLoop(time) {
+    if (!safeData.act) return;
+    const dt = (time - safeData.lt) / 1000; safeData.lt = time;
+    safeData.ang = (safeData.ang + (safeData.spd * safeData.dir) * dt) % 360; if (safeData.ang < 0) safeData.ang += 360;
+    document.querySelector('.safe-needle-box').style.transform = `rotate(${safeData.ang}deg)`;
+    safeData.fr = requestAnimationFrame(safeLoop);
+}
+
+document.getElementById('btn-safe-action').onclick = () => {
+    if (!safeData.act) { if (safeData.stg === -1) switchView('view-map'); return; }
+    let n = safeData.ang % 360; if (n < 0) n += 360;
+    const hit = (n >= safeData.zs && n <= safeData.zs + safeData.zw);
+    const btn = document.getElementById('btn-safe-action');
+    let id = safeData.bankId;
+    
+    if (hit) {
+        AudioSys.play('click'); safeData.stg++;
+        if (safeData.stg >= safeData.bank.s) {
+            safeData.act = false; updateSafeUI(); AudioSys.play('success');
+            let wLock = id === 'atm' ? 'text-slate-300' : (id === 'city' ? 'text-blue-300' : 'text-purple-300');
+            document.getElementById('safe-lock-icon').className = `ph-fill ph-lock-open text-3xl ${wLock}`;
+            let wBtn = id === 'atm' ? 'bg-slate-400' : (id === 'city' ? 'bg-blue-400' : 'bg-purple-400');
+            btn.className = `w-full max-w-[240px] py-4 rounded-xl font-black text-xl text-white translate-y-[6px] transition-all uppercase ${wBtn}`;
+            setTimeout(winSafe, 600);
+        } else {
+            safeData.spd += 40; if (safeData.bank.s >= 4 && safeData.stg % 2 === 1) safeData.dir *= -1;
+            setSafeZone(Math.max(20, safeData.zw - 8)); updateSafeUI(); btn.innerText = t('t_safe_stop');
+        }
+    } else {
+        safeData.act = false; safeData.stg = -1; updateSafeUI(); AudioSys.play('error');
+        btn.innerText = t('t_safe_fail');
+        btn.className = "w-full max-w-[240px] py-4 rounded-xl font-black text-xl shadow-[0_6px_0_#450a0a] active:shadow-[0_0px_0_#450a0a] active:translate-y-[6px] transition-all bg-red-900 text-white uppercase";
+        document.getElementById('safe-zone').style.background = `conic-gradient(from ${safeData.zs}deg, transparent 0, rgba(239,68,68,0.5) 0, rgba(239,68,68,0.5) ${safeData.zw}deg, transparent ${safeData.zw}deg)`;
+        document.getElementById('safe-lock-icon').className = "ph-fill ph-lock-key text-3xl text-red-500";
+    }
+};
+
+function updateSafeUI() {
+    let id = safeData.bankId;
+    let cDot = id === 'atm' ? 'bg-slate-400 border-slate-300' : (id === 'city' ? 'bg-blue-400 border-blue-300' : 'bg-purple-400 border-purple-300');
+    
+    for(let i=0; i<safeData.bank.s; i++) {
+        const d = document.getElementById(`sdot-${i}`); if (!d) continue;
+        if (safeData.stg > i) d.className = `w-3 h-3 rounded-full border-2 ${cDot}`;
+        else if (safeData.stg === i && safeData.act) d.className = "w-3 h-3 rounded-full border-2 bg-yellow-500 border-yellow-400 animate-[pop_0.5s_infinite]";
+        else if (safeData.stg === -1) d.className = "w-3 h-3 rounded-full border-2 bg-red-500 border-red-400";
+        else d.className = "w-3 h-3 rounded-full border-2 bg-slate-800 border-slate-700";
+    }
+}
+
+function winSafe() {
+    const roll = Math.random(); let rId = 'common';
+    for (let d of safeData.bank.drop) { if (roll <= d.c) { rId = d.r; break; } }
+    const pool = CARDS_DB.filter(c => c.rarity === rId); const won = pool[Math.floor(Math.random() * pool.length)];
+    
+    state.inv[won.id] = (state.inv[won.id] || 0) + 1; saveState(); checkEnergy();
+    document.getElementById('safe-game-ui').classList.add('hidden'); document.getElementById('safe-game-ui').style.display = 'none';
+    document.getElementById('safe-reward-ui').classList.remove('hidden'); document.getElementById('safe-reward-ui').style.display = 'flex';
+    document.getElementById('safe-reward-card').innerHTML = getCardHTML(won, true);
+}
+
+/* ==========================================================================
+   SHOP (SHADOW MARKET) LOGIC
+   ========================================================================== */
+function refreshShop() {
+    const currentHour = Math.floor(Date.now() / 3600000);
+    if (!state.shop || state.shop.hour < currentHour) {
+        const items = [];
+        for(let i=0; i<3; i++) {
+            let r = Math.random();
+            let rarity = r < 0.6 ? 'common' : (r < 0.9 ? 'rare' : 'epic');
+            
+            let pool = CARDS_DB.filter(c => c.rarity === rarity && !state.inv[c.id] && !items.find(item => item.id === c.id));
+            if (pool.length === 0) pool = CARDS_DB.filter(c => !state.inv[c.id] && !items.find(item => item.id === c.id));
+            if (pool.length === 0) pool = CARDS_DB.filter(c => !items.find(item => item.id === c.id));
+            if (pool.length === 0) pool = CARDS_DB;
+            
+            let card = pool[Math.floor(Math.random() * pool.length)];
+            items.push({ id: card.id, cost: Math.ceil(card.value * 1.5) }); 
+        }
+        state.shop = { hour: currentHour, items: items };
+        saveState();
+    }
+    refreshShopUI();
+    updateShopTimer();
+}
+
+function updateShopTimer() {
+    if(state.currentView !== 'view-shop') return;
+    const now = Date.now();
+    const nextHourMs = (Math.floor(now / 3600000) + 1) * 3600000;
+    const diff = nextHourMs - now;
+    const m = Math.floor((diff % 3600000) / 60000);
+    const s = Math.floor((diff % 60000) / 1000);
+    const text = state.lang === 'en' ? 'Refreshes in:' : 'Обновление через:';
+    document.getElementById('shop-timer').innerText = `${text} ${m.toString().padStart(2,'0')}:${s.toString().padStart(2,'0')}`;
+}
+
+let activeShopItem = null;
+let shopPayCards = [];
+
+function refreshShopUI() {
+    const cont = document.getElementById('shop-items-container');
+    if(!cont) return;
+    cont.innerHTML = '';
+    const priceStr = t('t_shop_price');
+    
+    state.shop.items.forEach(item => {
+        const c = CARDS_DB.find(x => x.id === item.id);
+        const div = document.createElement('div');
+        div.className = "bg-slate-800 border border-slate-700 rounded-xl p-3 flex items-center gap-4 shadow-lg cursor-pointer active:scale-95 transition-transform";
+        div.innerHTML = `
+            <div class="w-16 h-24 shrink-0 shadow-md relative">${getCardHTML(c, true)}</div>
+            <div class="flex-1 flex flex-col justify-center">
+                <div class="text-xs font-bold uppercase tracking-wider mb-1" style="color:${c.rColor}">${getRarityName(c.rarity)}</div>
+                <div class="text-sm font-black text-white leading-tight mb-2">${getCardName(c)}</div>
+                <div class="text-xs bg-slate-900 px-2 py-1 rounded inline-flex w-max items-center gap-1 text-slate-300">
+                    ${priceStr} <span class="text-yellow-400 font-bold">${item.cost}</span>
+                </div>
+            </div>
+            <i class="ph-bold ph-caret-right text-slate-500 text-xl"></i>
+        `;
+        div.onclick = () => openShopPurchase(item);
+        cont.appendChild(div);
+    });
+}
+
+function openShopPurchase(item) {
+    AudioSys.play('click');
+    activeShopItem = item; shopPayCards = [];
+    const c = CARDS_DB.find(x => x.id === item.id);
+    
+    document.getElementById('shop-target-card').innerHTML = getCardHTML(c, true);
+    
+    const descEl = document.getElementById('shop-buy-desc');
+    if (state.lang === 'en') {
+        descEl.innerHTML = `You give value <span id="shop-cost-val" class="font-bold text-yellow-400">${item.cost}</span> — You get a card`;
+    } else {
+        descEl.innerHTML = `Вы даёте ценность <span id="shop-cost-val" class="font-bold text-yellow-400">${item.cost}</span> — Вы получаете карту`;
+    }
+    
+    document.getElementById('shop-target-val').innerText = item.cost;
+    document.getElementById('shop-buy-modal').classList.remove('hidden');
+    renderShopPurchase();
+}
+
+function renderShopPurchase() {
+    const zP = document.getElementById('shop-player-zone'); zP.innerHTML = '';
+    let curVal = 0;
+    
+    shopPayCards.forEach((c, i) => {
+        curVal += c.value;
+        const d = document.createElement('div'); d.className = 'w-[40px] h-[60px] cursor-pointer active:scale-90 transition-transform';
+        d.innerHTML = getCardHTML(c, true); d.onclick = () => { shopPayCards.splice(i, 1); AudioSys.play('click'); renderShopPurchase(); };
+        zP.appendChild(d);
+    });
+    
+    document.getElementById('shop-player-val').innerText = curVal;
+    
+    const btnBuy = document.getElementById('btn-shop-confirm');
+    if (curVal >= activeShopItem.cost) {
+        btnBuy.className = "flex-1 py-3 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl active:scale-95 transition-all uppercase shadow-lg shadow-emerald-500/30";
+        btnBuy.style.pointerEvents = "auto";
+    } else {
+        btnBuy.className = "flex-1 py-3 bg-slate-700 text-slate-500 font-bold rounded-xl pointer-events-none transition-colors uppercase";
+        btnBuy.style.pointerEvents = "none";
+    }
+
+    const zI = document.getElementById('shop-inventory-grid'); zI.innerHTML = '';
+    for(let id in state.inv) {
+        const inO = shopPayCards.filter(c => c.id == id).length; const avail = state.inv[id] - inO;
+        if(avail > 0) {
+            const c = CARDS_DB.find(x => x.id == id);
+            const d = document.createElement('div'); d.className = "w-[45px] h-[65px] shrink-0 relative cursor-pointer active:scale-90 transition-transform";
+            d.innerHTML = getCardHTML(c, true) + `<div class="absolute -top-2 -right-2 bg-cyan-600 text-white text-[9px] w-5 h-5 rounded-full flex items-center justify-center font-bold z-10 shadow-lg border border-slate-900">${avail}</div>`;
+            d.onclick = () => { if(shopPayCards.length < 8) { shopPayCards.push(c); AudioSys.play('click'); renderShopPurchase(); } };
+            zI.appendChild(d);
+        }
+    }
+}
+
+document.getElementById('btn-shop-cancel').onclick = () => { AudioSys.play('click'); document.getElementById('shop-buy-modal').classList.add('hidden'); };
+
+document.getElementById('btn-shop-confirm').onclick = () => {
+    AudioSys.play('coin');
+    shopPayCards.forEach(c => { state.inv[c.id]--; if(state.inv[c.id] <= 0) delete state.inv[c.id]; });
+    state.inv[activeShopItem.id] = (state.inv[activeShopItem.id] || 0) + 1;
+    
+    state.shop.items = state.shop.items.filter(i => i.id !== activeShopItem.id);
+    saveState();
+    
+    showToast(t('msg_trade_succ'));
+    document.getElementById('shop-buy-modal').classList.add('hidden');
+    refreshShopUI(); checkEnergy();
+};
+
+/* ==========================================================================
+   COLLECTION & 3D & SELL DUPES
+   ========================================================================== */
+function renderCollection() {
+    const g = document.getElementById('collection-grid'); g.innerHTML = ''; let uniqueOwned = 0;
+    CARDS_DB.forEach(c => {
+        const count = state.inv[c.id] || 0; const unl = count > 0; if (unl) uniqueOwned++;
+        const d = document.createElement('div');
+        d.className = `relative aspect-[2.5/3.5] rounded-md cursor-pointer transition-transform active:scale-90 shadow-md ${unl ? '' : 'opacity-60'}`;
+        d.innerHTML = getCardHTML(c, unl);
+        if (unl && count > 1) d.innerHTML += `<div class="absolute -top-2 -right-2 bg-blue-600 text-white text-[10px] w-5 h-5 rounded-full flex items-center justify-center font-bold shadow-lg z-10 border border-slate-900">${count}</div>`;
+        d.onclick = () => { AudioSys.play('click'); open3D(c, unl, count); }; g.appendChild(d);
+    });
+    document.getElementById('coll-progress').innerText = `${uniqueOwned}/50`;
+}
+
+const m3d = document.getElementById('modal-3d'); const c3d = document.getElementById('card-3d-element'); let active3DCard = null;
+
+function open3D(c, unl, count) {
+    active3DCard = c; const rName = getRarityName(c.rarity);
+    c3d.innerHTML = `
+        <div class="absolute inset-0 rounded-xl overflow-hidden border-2" style="border-color:${unl ? c.rColor : '#333'}; filter:${unl ? 'none' : 'grayscale(100%) brightness(0.3)'};">
+            <div class="absolute inset-0" style="background:${c.css};"></div>
+            <div class="emoji-wrap-3d"><div class="card-3d-emoji">${c.emoji}</div></div>
+            <div class="absolute bottom-0 inset-x-0 bg-black/90 p-3 text-center z-20">
+                <div class="text-[10px] font-bold uppercase mb-1" style="color:${c.rColor}">${rName}</div>
+                <div class="text-xl font-black text-white mb-2">${getCardName(c)}</div>
+                ${unl ? `<div class="text-sm font-bold text-slate-300">Value: <span style="color:${c.rColor}">${c.value}</span></div>` : '<i class="ph-fill ph-lock-key text-white text-xl"></i>'}
+            </div>
+        </div>
+    `;
+    const sellBox = document.getElementById('sell-btn-container');
+    if (unl && count > 1) sellBox.classList.remove('hidden'); else sellBox.classList.add('hidden');
+    m3d.classList.remove('hidden'); m3d.style.display = 'flex';
+}
+
+document.getElementById('btn-close-modal').onclick = () => { m3d.classList.add('hidden'); m3d.style.display = 'none'; c3d.style.transform = `perspective(1000px)`; AudioSys.play('click'); };
+
+document.getElementById('btn-sell-dup').onclick = () => {
+    if (active3DCard && state.inv[active3DCard.id] > 1) {
+        state.inv[active3DCard.id]--; state.energy = Math.min(5, state.energy + 1); saveState(); checkEnergy();
+        AudioSys.play('coin'); showToast(t('msg_sold'));
+        if (state.inv[active3DCard.id] <= 1) document.getElementById('sell-btn-container').classList.add('hidden');
+        if (state.currentView === 'view-collection') renderCollection();
+    }
+};
+
+let drag3D = false;
+m3d.onmousedown = m3d.ontouchstart = (e) => { if(e.target === m3d || e.target.closest('#btn-close-modal') || e.target.closest('#btn-sell-dup')) return; drag3D = true; hand3D(e.touches ? e.touches[0] : e); };
+window.onmouseup = window.ontouchend = () => { drag3D = false; c3d.style.transform = `perspective(1000px)`; };
+window.onmousemove = window.ontouchmove = (e) => { if(drag3D) hand3D(e.touches ? e.touches[0] : e); };
+
+function hand3D(e) {
+    if (m3d.classList.contains('hidden')) return;
+    const r = c3d.getBoundingClientRect(); const cx = r.left + r.width / 2; const cy = r.top + r.height / 2;
+    const rx = Math.max(-20, Math.min(20, -((e.clientY - cy) / (r.height / 2)) * 20)); const ry = Math.max(-20, Math.min(20, ((e.clientX - cx) / (r.width / 2)) * 20));
+    c3d.style.transform = `perspective(1000px) rotateX(${rx}deg) rotateY(${ry}deg) scale3d(1.05, 1.05, 1.05)`;
+}
+
+/* ==========================================================================
+   TRADE SYSTEM (BEGINNER FRIENDLY & BALANCED)
+   ========================================================================== */
+const trd = { bot: [], pl: [], st: 'wait', tm: null, botGreed: 1.0, greetIdx: 0 };
+let tInt = null;
+
+function checkTradeAccess() {
+    const now = Date.now();
+    if (now < state.tradeCooldown) {
+        document.getElementById('trade-hub-status').classList.remove('hidden'); document.getElementById('trade-active-ui').classList.add('hidden');
+        clearInterval(tInt);
+        tInt = setInterval(() => {
+            const left = Math.ceil((state.tradeCooldown - Date.now()) / 1000);
+            if (left <= 0) { clearInterval(tInt); startTrade(); } else { document.getElementById('trade-status-text').innerText = `${t('trade_wait')} ${left}s`; }
+        }, 1000);
+    } else { startTrade(); }
+}
+
+function botChatStr(str, bad = false) {
+    const c = document.getElementById('bot-chat');
+    c.innerText = str; c.style.color = bad ? '#ef4444' : '#22d3ee';
+    c.style.animation = 'none'; c.offsetHeight; c.style.animation = 'fadeIn 0.3s ease';
+}
+
+function startTrade() {
+    document.getElementById('trade-hub-status').classList.add('hidden');
+    document.getElementById('trade-active-ui').classList.remove('hidden'); document.getElementById('trade-active-ui').style.display = 'flex';
+    
+    trd.pl = [];
+    
+    try {
+        if (state.activeTrade && state.activeTrade.bot) {
+            trd.bot = state.activeTrade.bot.map(id => CARDS_DB.find(c => c.id === id)).filter(Boolean);
+            if (trd.bot.length === 0) throw new Error("Corrupted trade bot array");
+            trd.botGreed = state.activeTrade.greed || 1.0;
+            trd.greetIdx = state.activeTrade.greetIdx || 0;
+            const hellos = BOT_PHRASES[state.lang]['hello'];
+            botChatStr(hellos[trd.greetIdx % hellos.length]);
+        } else {
+            throw new Error("No active trade, generating new one");
+        }
+    } catch (e) {
+        trd.botGreed = state.adminGreed ? parseFloat(state.adminGreed) : (0.6 + (Math.random() * 0.72));
+        const hellos = BOT_PHRASES[state.lang]['hello'];
+        trd.greetIdx = Math.floor(Math.random() * hellos.length);
+        botChatStr(hellos[trd.greetIdx]);
+
+        const totVal = Object.keys(state.inv).reduce((s,k) => s + CARDS_DB[k-1].value * state.inv[k], 0);
+        let target = Math.max(1, totVal * (0.10 + Math.random() * 0.15)); 
+        if (target > 150) target = 150 + Math.random() * 50;
+        
+        trd.bot = []; let cV = 0, at = 0;
+        while (cV < target && trd.bot.length < 4 && at < 50) {
+            let rem = target - cV;
+            // SMART FILTER: Limits card rarity exactly to the remaining target (so poor players get common cards)
+            let p = CARDS_DB.filter(c => c.value <= Math.max(1, rem * 1.3) && c.rarity !== 'secret');
+            if (totVal >= 200 && Math.random() < 0.03) p = p.concat(CARDS_DB.filter(c => c.rarity === 'secret'));
+            if (!p.length) p = CARDS_DB.filter(c => c.rarity === 'common');
+            
+            p.sort((a,b) => b.value - a.value); 
+            // Gives a huge chance to just pick ordinary/suitable cards instead of exclusively the most expensive ones
+            let pickIdx = Math.floor(Math.random() * Math.max(1, p.length * 0.5));
+            const c = p[pickIdx] || p[0];
+            
+            trd.bot.push(c); cV += c.value; at++;
+        }
+        if(!trd.bot.length) trd.bot.push(CARDS_DB[0]);
+        
+        state.activeTrade = { bot: trd.bot.map(c => c.id), greed: trd.botGreed, greetIdx: trd.greetIdx };
+        saveState();
+    }
+    renderTrade();
+}
+
+function renderTrade() {
+    trd.st = 'idle';
+
+    const zB = document.getElementById('zone-bot'); zB.innerHTML = `<div class="absolute top-2 right-2 text-[10px] font-bold text-red-400 uppercase opacity-30 pointer-events-none" id="t_trade_bot">${t('t_trade_bot')}</div>`;
+    trd.bot.forEach((c, i) => {
+        const d = document.createElement('div'); d.className = 'card-on-table'; d.style.transform = `rotate(${(i%2==0?-1:1)*3}deg)`;
+        d.innerHTML = getCardHTML(c, true);
+        d.onmousedown = d.ontouchstart = () => { trd.tm = setTimeout(() => open3D(c,true,0), 400); }; d.onmouseup = d.ontouchend = () => clearTimeout(trd.tm);
+        zB.appendChild(d);
+    });
+
+    const zP = document.getElementById('zone-player'); zP.innerHTML = `<div class="absolute bottom-2 right-2 text-[10px] font-bold text-cyan-400 uppercase opacity-30 pointer-events-none" id="t_trade_you">${t('t_trade_you')}</div>`;
+    trd.pl.forEach((c, i) => {
+        const d = document.createElement('div'); d.className = 'card-on-table z-10'; d.style.transform = `rotate(${(i%2==0?1:-1)*3}deg)`;
+        d.innerHTML = getCardHTML(c, true);
+        d.onmousedown = d.ontouchstart = () => { trd.tm = setTimeout(() => open3D(c,true,0), 400); };
+        d.onmouseup = d.ontouchend = (e) => {
+            clearTimeout(trd.tm);
+            if ((e.type === 'mouseup' || e.type === 'touchend') && trd.st === 'idle') { trd.pl.splice(i, 1); AudioSys.play('click'); renderTrade(); }
+        };
+        zP.appendChild(d);
+    });
+
+    const zI = document.getElementById('trade-inventory-grid'); zI.innerHTML = '';
+    for(let id in state.inv) {
+        const inO = trd.pl.filter(c => c.id == id).length; const avail = state.inv[id] - inO;
+        if(avail > 0) {
+            const c = CARDS_DB.find(x => x.id == id);
+            const d = document.createElement('div'); d.className = "w-[45px] h-[65px] shrink-0 relative cursor-pointer active:scale-90 transition-transform";
+            d.innerHTML = getCardHTML(c, true) + `<div class="absolute -top-2 -right-2 bg-cyan-600 text-white text-[9px] w-5 h-5 rounded-full flex items-center justify-center font-bold z-10 shadow-lg border border-slate-900">${avail}</div>`;
+            d.onclick = () => { if (trd.st !== 'idle' || trd.pl.length >= 6) return; trd.pl.push(c); AudioSys.play('click'); renderTrade(); };
+            zI.appendChild(d);
+        }
+    }
+}
+
+function finishTrade(cdSecs) {
+    state.activeTrade = null; state.tradeCooldown = Date.now() + cdSecs * 1000; saveState(); checkTradeAccess();
+}
+
+document.getElementById('btn-trade-reject').onclick = function() {
+    if(trd.st !== 'idle') return; trd.st = 'wait'; AudioSys.play('click'); showToast(t('msg_cancel')); setTimeout(() => { try { finishTrade(15); } catch(e){ trd.st = 'idle'; console.error(e); } }, 500);
+};
+
+document.getElementById('btn-trade-add').onclick = function() {
+    if(trd.st !== 'idle') return; trd.st = 'wait'; AudioSys.play('click');
+    setTimeout(() => {
+        try {
+            const pV = trd.pl.reduce((s,c) => s + c.value, 0); const bV = trd.bot.reduce((s,c) => s + c.value, 0);
+            const remVal = Object.keys(state.inv).reduce((s,k) => s + CARDS_DB[k-1].value * (state.inv[k] - trd.pl.filter(c => c.id == k).length), 0);
+            
+            if (remVal === 0 && pV < (bV * trd.botGreed)) { botChatStr(getRandomPhrase('empty_inv'), true); AudioSys.play('error'); setTimeout(() => finishTrade(15), 2000); return; }
+            if (trd.bot.length >= 5 || Math.random() < 0.1) { botChatStr(getRandomPhrase('no_cards'), true); trd.st = 'idle'; AudioSys.play('error'); return; }
+            
+            if (pV > (bV * trd.botGreed)) {
+                botChatStr(getRandomPhrase('add')); AudioSys.play('success');
+                const margin = Math.max(1, pV * 0.10); // Honest matching algorithm
+                let p = CARDS_DB.filter(c => c.value <= (pV - (bV * trd.botGreed) + margin)); 
+                if (!p.length) p = CARDS_DB.filter(c => c.rarity === 'common');
+                const nC = p[Math.floor(Math.random() * p.length)]; trd.bot.push(nC);
+                state.activeTrade.bot.push(nC.id); saveState();
+                renderTrade();
+            } else { botChatStr(getRandomPhrase('refuse_add'), true); AudioSys.play('error'); trd.st = 'idle'; }
+        } catch(e) { trd.st = 'idle'; console.error(e); }
+    }, 600);
+};
+
+document.getElementById('btn-trade-accept').onclick = function() {
+    if(trd.st !== 'idle') return; trd.st = 'wait'; AudioSys.play('click');
+    setTimeout(() => {
+        try {
+            const pV = trd.pl.reduce((s,c) => s + c.value, 0); const bV = trd.bot.reduce((s,c) => s + c.value, 0);
+            if (pV === 0) { botChatStr(getRandomPhrase('zero'), true); AudioSys.play('error'); trd.st = 'idle'; return; }
+            
+            if (pV >= (bV * trd.botGreed)) {
+                botChatStr(getRandomPhrase('accept')); showToast(t('msg_trade_succ')); AudioSys.play('coin');
+                trd.pl.forEach(c => { state.inv[c.id]--; if(state.inv[c.id] <= 0) delete state.inv[c.id]; });
+                trd.bot.forEach(c => { state.inv[c.id] = (state.inv[c.id] || 0) + 1; });
+                checkEnergy(); setTimeout(() => finishTrade(5), 1500);
+            } else { botChatStr(getRandomPhrase('need_more'), true); AudioSys.play('error'); trd.st = 'idle'; }
+        } catch(e) { trd.st = 'idle'; console.error(e); }
+    }, 600);
+};
+
+/* ==========================================================================
+   SETTINGS, PROMOS & INITIALIZATION
+   ========================================================================== */
+document.querySelectorAll('.lang-btn').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+        state.lang = e.currentTarget.dataset.lang; saveState(); updateLoc(); AudioSys.play('click');
+        if(state.currentView === 'view-collection') renderCollection();
+        if(state.currentView === 'view-trade' && trd.st !== 'wait') {
+            const hellos = BOT_PHRASES[state.lang]['hello'];
+            botChatStr(hellos[trd.greetIdx % hellos.length]); renderTrade();
+        }
+    });
+});
+
+document.getElementById('toggle-sound').onchange = (e) => { state.sound = e.target.checked; saveState(); AudioSys.play('click'); };
+
+// Promo System
+document.getElementById('btn-promo-apply').onclick = () => {
+    AudioSys.play('click');
+    const code = document.getElementById('input-promo').value.trim(); document.getElementById('input-promo').value = '';
+    
+    if (code === 'StartUser') {
+        if (state.usedPromos.includes('StartUser')) return showToast(t('msg_promo_used'));
+        state.usedPromos.push('StartUser');
+        const comms = CARDS_DB.filter(c => c.rarity === 'common');
+        const gift = comms[Math.floor(Math.random() * comms.length)];
+        state.inv[gift.id] = (state.inv[gift.id] || 0) + 1;
+        saveState(); checkEnergy(); showToast(t('msg_promo_start')); AudioSys.play('success');
+    } else if (code === 'AdminPanel1977') {
+        state.admin = true; saveState(); document.getElementById('admin-panel').classList.remove('hidden'); showToast("Admin Panel Unlocked"); AudioSys.play('success');
+    } else if (code === '-1977') {
+        state.admin = false; saveState(); document.getElementById('admin-panel').classList.add('hidden'); showToast("Admin Panel Locked");
+    } else { showToast(t('msg_promo_bad')); AudioSys.play('error'); }
+};
+
+// Admin Functions
+document.getElementById('adm-energy').onclick = () => { state.energy = 5; saveState(); checkEnergy(); AudioSys.play('coin'); };
+document.getElementById('adm-cards').onclick = () => { CARDS_DB.forEach(c => { state.inv[c.id] = (state.inv[c.id] || 0) + 1; }); saveState(); checkEnergy(); AudioSys.play('success'); };
+document.getElementById('adm-kspt').onclick = () => { 
+    state.ksptClaimed = false;
+    document.getElementById('btn-kspt-claim').innerHTML = `<span id="t_kspt_btn">${t('t_kspt_btn')}</span>`;
+    document.getElementById('btn-kspt-claim').style.pointerEvents = 'auto';
+    document.getElementById('btn-kspt-close').style.display = 'none';
+    document.getElementById('modal-kspt').classList.remove('hidden'); 
+    document.getElementById('modal-kspt').style.display = 'flex'; 
+    AudioSys.play('success'); 
+};
+document.getElementById('adm-greed').onchange = (e) => {
+    const val = e.target.value; if(val === "") state.adminGreed = null; else state.adminGreed = parseFloat(val); saveState();
+};
+
+// Start application
+loadState();
+switchView('view-map');
+</script>
+</body>
+</html>
