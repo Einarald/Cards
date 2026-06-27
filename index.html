@@ -1142,8 +1142,8 @@ function updateSafeUI() {
 }
 
 function winSafe() {
-    const roll = Math.random(); let rId = 'common';
-    for (let d of safeData.bank.drop) { if (roll <= d.c) { rId = d.r; break; } }
+    const roll = Math.random(); let rId = safeData.bank.drop[safeData.bank.drop.length - 1].r;
+    let cum = 0; for (let d of safeData.bank.drop) { cum += d.c; if (roll < cum) { rId = d.r; break; } }
     const pool = CARDS_DB.filter(c => c.rarity === rId); const won = pool[Math.floor(Math.random() * pool.length)];
     
     state.inv[won.id] = (state.inv[won.id] || 0) + 1; saveState(); checkEnergy();
@@ -1394,8 +1394,8 @@ function startTrade() {
         botChatStr(hellos[trd.greetIdx]);
 
         const totVal = Object.keys(state.inv).reduce((s,k) => s + CARDS_DB[k-1].value * state.inv[k], 0);
-        let target = Math.max(1, totVal * (0.10 + Math.random() * 0.15)); 
-        if (target > 150) target = 150 + Math.random() * 50;
+        let target = Math.max(1, totVal * (0.18 + Math.random() * 0.22)); 
+        if (target > 300) target = 300 + Math.random() * 100;
         
         trd.bot = []; let cV = 0, at = 0;
         while (cV < target && trd.bot.length < 4 && at < 50) {
